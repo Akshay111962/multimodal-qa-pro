@@ -80,11 +80,14 @@ def login_user(email: str, password: str) -> dict:
     - Returns {"success": False, "message": "Invalid email or password"} on failure
     """
     try:
-        conn = sqlite3.connect("users.db")
+        # Validate inputs
+        if not email or not password:
+            return {"success": False, "message": "Email and password are required"}
+        conn = sqlite3.connect("users.db", timeout=5)
         row = None
         try:
             cursor = conn.cursor()
-            cursor.execute("SELECT name, email, password_hash FROM users WHERE email = ?", (email,))
+            cursor.execute("SELECT name, email, password_hash FROM users WHERE email = ?", (email.strip().lower(),))
             row = cursor.fetchone()
         finally:
             conn.close()
