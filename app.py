@@ -1762,5 +1762,5 @@ if __name__ == '__main__':
     # Mount Gradio app onto FastAPI
     api_app = gr.mount_gradio_app(api_app, demo, path="/", root_path="")
 
-    uvicorn.run(api_app, host="0.0.0.0", port=7860)
+    uvicorn.run(api_app, host="0.0.0.0", port=int(os.environ.get("PORT", 7860)))
 
