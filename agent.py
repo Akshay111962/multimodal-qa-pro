@@ -61,7 +61,7 @@ def run_agent(query: str) -> Tuple[str, List[str]]:
 
     api_key = os.environ.get("GROQ_API_KEY")
     if not api_key:
-        raise ValueError("GROQ_API_KEY is not configured in .env file.")
+        raise ValueError("GROQ_API_KEY environment variable is not set. Please add it to your Render Environment Variables.")
 
     # Initialize the tools
     tools = [search_documents, search_web, describe_image]

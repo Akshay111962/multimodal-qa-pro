@@ -89,7 +89,7 @@ def run_agent_query(query: str) -> dict:
     except Exception as e:
         print(f"Error in backend_interface.run_agent_query: {e}", file=sys.stderr)
         return {
-            "answer": "Something went wrong processing your request.",
+            "answer": f"Something went wrong processing your request: {str(e)}",
             "tools_used": []
         }
 
