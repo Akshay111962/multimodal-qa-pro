@@ -1,5 +1,7 @@
 # 🧠 Multimodal Q&A Pro
 
+🚀 **Live Deployment Link**: [https://multimodal-qa-pro.onrender.com](https://multimodal-qa-pro.onrender.com)
+
 **One Agent. Three Senses. — A Hybrid RAG System with Document Search, Web Search & Vision.**
 
 Multimodal Q&A Pro is a full-stack AI-powered question-answering platform built for the **GenAI Summer of Code Hackathon 2026**. It combines local document retrieval (RAG), real-time web search, and image understanding into a single intelligent agent — all wrapped in a sleek, modern web interface.
@@ -9,7 +11,7 @@ Multimodal Q&A Pro is a full-stack AI-powered question-answering platform built 
 ![LangChain](https://img.shields.io/badge/LangChain-1.3-1C3C3C?logo=langchain&logoColor=white)
 ![LangGraph](https://img.shields.io/badge/LangGraph-1.2-blue)
 ![Groq](https://img.shields.io/badge/Groq-LLaMA%203.3%2070B-F55036)
-![ChromaDB](https://img.shields.io/badge/ChromaDB-Vector%20Store-green)
+![SQLite](https://img.shields.io/badge/SQLite-Database-003B57?logo=sqlite&logoColor=white)
 ![License](https://img.shields.io/badge/License-MIT-yellow)
 
 ---
@@ -18,13 +20,14 @@ Multimodal Q&A Pro is a full-stack AI-powered question-answering platform built 
 
 | Feature | Description |
 |---------|-------------|
-| 📄 **PDF Document Search (RAG)** | Upload PDFs → auto-chunked, embedded & indexed into ChromaDB. Query them with natural language. |
+| 📄 **PDF Document Search (RAG)** | Upload PDFs → auto-chunked, embedded & indexed into an optimized SQLite Text Store. Query them with natural language. |
 | 🌐 **Real-time Web Search** | Fetches live results from DuckDuckGo for current events, news, and general knowledge. |
 | 🖼️ **Image Understanding** | Upload images → analyzed using Groq's vision-capable LLM (LLaMA 3.3 70B). |
 | 🤖 **Hybrid Agent Routing** | LangGraph ReAct agent automatically decides which tool(s) to use based on the query. |
 | 🔐 **User Authentication** | Full signup/login system with bcrypt-hashed passwords and SQLite storage. |
 | 🎨 **Modern UI** | Claude-inspired dark theme with sidebar, animated landing page, and responsive layout. |
 | 🔄 **Automatic Fallback** | If the primary model fails, the agent falls back to `llama-3.1-8b-instant` automatically. |
+
 
 ---
 
