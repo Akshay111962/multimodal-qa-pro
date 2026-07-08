@@ -255,6 +255,6 @@ This project is open source and available under the [MIT License](LICENSE).
 
 ## 👤 Author
 
-**Akshay (Achyut)**
+**Akshay Purohit . Achyut Pathak**
 
 Built for the GenAI Summer of Code Hackathon 2026.
