@@ -1554,7 +1554,7 @@ footer, .footer, #footer {
 """
 
 
-with gr.Blocks(title="Multimodal Q&A Pro", fill_width=True, css=custom_css) as demo:
+with gr.Blocks(title="Multimodal Q&A Pro", fill_width=True) as demo:
     gr.HTML(f"<style>{custom_css}</style>")
     session_state = gr.State(None)
     trigger_js_box = gr.Textbox(visible=False, elem_id='trigger-js-box')
