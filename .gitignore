@@ -8,3 +8,5 @@ chroma_db/
 *.jpg
 *.pdf
 users.db
+*.db
+

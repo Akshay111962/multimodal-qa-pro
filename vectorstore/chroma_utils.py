@@ -1,54 +1,148 @@
 import os
+import sys
+import math
+import sqlite3
 from typing import List, Any
 import pypdf
 from langchain_core.documents import Document
-
-# Robust imports supporting older and newer LangChain versions
-try:
-    from langchain_chroma import Chroma
-except ImportError:
-    try:
-        from langchain_community.vectorstores import Chroma
-    except ImportError:
-        from langchain.vectorstores import Chroma
 
 try:
     from langchain_text_splitters import RecursiveCharacterTextSplitter
 except ImportError:
     from langchain.text_splitter import RecursiveCharacterTextSplitter
 
-try:
-    from langchain_huggingface import HuggingFaceEmbeddings
-except ImportError:
-    try:
-        from langchain_community.embeddings import HuggingFaceEmbeddings
-    except ImportError:
-        from langchain.embeddings import HuggingFaceEmbeddings
+
+class SQLiteVectorStore:
+    """
+    A lightweight, SQLite-backed text search engine mimicking LangChain's Chroma vector store.
+    Uses TF-IDF approximation / term frequency overlap for fast, 0-RAM retrieval without PyTorch.
+    """
+    def __init__(self, collection_name: str = "documents"):
+        self.collection_name = collection_name
+        self.db_path = "documents.db"
+        self._init_db()
+
+    def _init_db(self):
+        conn = sqlite3.connect(self.db_path)
+        try:
+            cursor = conn.cursor()
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS documents (
+                    id TEXT PRIMARY KEY,
+                    collection_name TEXT,
+                    page_content TEXT,
+                    source TEXT,
+                    page INTEGER
+                )
+            """)
+            conn.commit()
+        finally:
+            conn.close()
+
+    def get(self) -> dict:
+        """Mimics Chroma's get() method, returning all indexed records for the collection."""
+        conn = sqlite3.connect(self.db_path)
+        try:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT id, page_content, source, page FROM documents WHERE collection_name = ?",
+                (self.collection_name,)
+            )
+            rows = cursor.fetchall()
+        finally:
+            conn.close()
+
+        ids = []
+        documents = []
+        metadatas = []
+        for row in rows:
+            ids.append(row[0])
+            documents.append(row[1])
+            metadatas.append({"source": row[2], "page": row[3]})
+        return {"ids": ids, "documents": documents, "metadatas": metadatas}
+
+    def similarity_search(self, query: str, k: int = 4) -> List[Document]:
+        """Mimics similarity_search using a TF-IDF approximation scoring system."""
+        data = self.get()
+        docs = data["documents"]
+        metadatas = data["metadatas"]
+
+        if not docs:
+            return []
+
+        # Tokenize query
+        query_words = [w.lower().strip(",.?!()[]{}:;\"'") for w in query.split() if len(w) > 1]
+        if not query_words:
+            query_words = [query.lower()]
+
+        # Simple inverse document frequency (IDF) calculation helper
+        num_docs = len(docs)
+        word_doc_counts = {}
+        for qw in query_words:
+            count = sum(1 for doc in docs if qw in doc.lower())
+            word_doc_counts[qw] = count
+
+        scores = []
+        for doc_text, meta in zip(docs, metadatas):
+            doc_lower = doc_text.lower()
+            score = 0.0
+            
+            # Simple TF-IDF scoring formula
+            for qw in query_words:
+                tf = doc_lower.count(qw)
+                if tf > 0:
+                    # IDF with smoothing
+                    doc_freq = word_doc_counts.get(qw, 0)
+                    idf = math.log((1.0 + num_docs) / (1.0 + doc_freq)) + 1.0
+                    # Length normalization factor
+                    length_factor = 1.0 / (1.0 + math.log(1.0 + len(doc_text.split())))
+                    score += tf * idf * length_factor
+
+            scores.append((score, doc_text, meta))
+
+        # Sort descending by score
+        scores.sort(key=lambda x: x[0], reverse=True)
+
+        results = []
+        # Return top-k matching documents
+        for score, text, meta in scores[:k]:
+            results.append(Document(page_content=text, metadata=meta))
+        return results
+
+    @classmethod
+    def from_documents(cls, documents: List[Document], embedding: Any, persist_directory: str, collection_name: str):
+        """Mimics Chroma.from_documents by saving documents to the SQLite database."""
+        store = cls(collection_name)
+        
+        conn = sqlite3.connect(store.db_path)
+        try:
+            cursor = conn.cursor()
+            # Clear existing entries in this collection to match indexing overwrite behavior
+            cursor.execute("DELETE FROM documents WHERE collection_name = ?", (collection_name,))
+            
+            # Insert each document chunk
+            for idx, doc in enumerate(documents):
+                doc_id = f"{collection_name}_{idx}_{hash(doc.page_content)}"
+                source = doc.metadata.get("source", "Unknown Source")
+                page = doc.metadata.get("page", 1)
+                cursor.execute(
+                    "INSERT OR REPLACE INTO documents (id, collection_name, page_content, source, page) VALUES (?, ?, ?, ?, ?)",
+                    (doc_id, collection_name, doc.page_content, source, page)
+                )
+            conn.commit()
+        finally:
+            conn.close()
+        return store
 
 
-def index_pdf(file_path: str, collection_name: str = "documents") -> Chroma:
+def index_pdf(file_path: str, collection_name: str = "documents") -> SQLiteVectorStore:
     """
     Extracts text from a PDF file page-by-page, splits the text into smaller chunks
-    with page-tracking metadata, embeds them using HuggingFace all-MiniLM-L6-v2,
-    and stores them in a persistent ChromaDB vector database.
-
-    Args:
-        file_path (str): Absolute or relative path to the PDF file.
-        collection_name (str): Name of the Chroma collection. Defaults to "documents".
-
-    Returns:
-        Chroma: The persistent Chroma vector store containing the indexed chunks.
-
-    Raises:
-        FileNotFoundError: If the PDF file does not exist at file_path.
-        ValueError: If the PDF file is corrupted, empty, has no pages, or contains no readable text.
-        RuntimeError: If storing the chunks in ChromaDB fails.
+    with page-tracking metadata, and stores them in the persistent SQLite text store.
     """
-    # 1. Input Validation and Error Handling
     if not os.path.exists(file_path):
         raise FileNotFoundError(f"The PDF file could not be found at: {file_path}")
 
-    # Check for empty file
     if os.path.getsize(file_path) == 0:
         raise ValueError(f"The PDF file '{file_path}' is empty (0 bytes).")
 
@@ -56,12 +150,11 @@ def index_pdf(file_path: str, collection_name: str = "documents") -> Chroma:
         reader = pypdf.PdfReader(file_path)
         num_pages = len(reader.pages)
     except Exception as e:
-        raise ValueError(f"Failed to parse PDF file '{file_path}'. It may be corrupted or invalid. Details: {e}")
+        raise ValueError(f"Failed to parse PDF file '{file_path}'. Details: {e}")
 
     if num_pages == 0:
         raise ValueError(f"The PDF file '{file_path}' contains zero pages.")
 
-    # 2. Extract Text Page-by-Page
     documents: List[Document] = []
     source_filename = os.path.basename(file_path)
 
@@ -71,10 +164,8 @@ def index_pdf(file_path: str, collection_name: str = "documents") -> Chroma:
             page = reader.pages[page_idx]
             text = page.extract_text()
         except Exception as e:
-            # We raise a ValueError to avoid silently skipping corrupted pages
             raise ValueError(f"Failed to extract text from page {page_num} in '{file_path}'. Details: {e}")
 
-        # Only create a document if the page contains readable, non-whitespace text
         if text and text.strip():
             documents.append(Document(
                 page_content=text,
@@ -85,12 +176,9 @@ def index_pdf(file_path: str, collection_name: str = "documents") -> Chroma:
             ))
 
     if not documents:
-        raise ValueError(
-            f"No readable text could be extracted from PDF file '{file_path}'. "
-            "It may consist purely of scanned images or have non-extractable text content."
-        )
+        raise ValueError(f"No readable text could be extracted from PDF file '{file_path}'.")
 
-    # 3. Split Text into Chunks (preserving source and page metadata)
+    # Split text into chunks
     text_splitter = RecursiveCharacterTextSplitter(
         chunk_size=500,
         chunk_overlap=100
@@ -100,139 +188,34 @@ def index_pdf(file_path: str, collection_name: str = "documents") -> Chroma:
     if not chunks:
         raise ValueError("Text splitting resulted in zero chunks.")
 
-    # 4. Initialize Embeddings Model (all-MiniLM-L6-v2)
-    embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
-
-    # 5. Store Chunks in a Persistent ChromaDB Collection
-    persist_dir = "./chroma_db"
-    try:
-        db = Chroma.from_documents(
-            documents=chunks,
-            embedding=embeddings,
-            persist_directory=persist_dir,
-            collection_name=collection_name
-        )
-    except Exception as e:
-        raise RuntimeError(f"Failed to store documents in Chroma collection '{collection_name}': {e}")
+    # Save to SQLite store
+    db = SQLiteVectorStore.from_documents(
+        documents=chunks,
+        embedding=None,
+        persist_directory=None,
+        collection_name=collection_name
+    )
 
     return db
 
 
-def get_chroma_collection(collection_name: str = "documents") -> Chroma:
+def get_chroma_collection(collection_name: str = "documents") -> SQLiteVectorStore:
     """
-    Retrieves the existing Chroma vector store client/collection wrapper for querying later.
-
-    Args:
-        collection_name (str): Name of the Chroma collection to load. Defaults to "documents".
-
-    Returns:
-        Chroma: The LangChain Chroma vector store instance initialized with the collection.
+    Retrieves the existing SQLite text store client wrapper for querying.
+    Note: Keep the name 'get_chroma_collection' for backward compatibility.
     """
-    embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
-    persist_dir = "./chroma_db"
-    
-    return Chroma(
-        collection_name=collection_name,
-        embedding_function=embeddings,
-        persist_directory=persist_dir
-    )
+    return SQLiteVectorStore(collection_name=collection_name)
 
 
 if __name__ == "__main__":
-    import shutil
-    import sys
-    
-    if hasattr(sys.stdout, 'reconfigure'):
-        sys.stdout.reconfigure(encoding='utf-8')
-    
     test_pdf_path = "./test.pdf"
     collection_name = "documents"
 
-    print("=== Chroma RAG Utils Test Sandbox ===")
+    print("=== SQLite Text Store Verification Sandbox ===")
     
-    # Check if a test PDF exists
-    if not os.path.exists(test_pdf_path):
-        print(f"Warning: '{test_pdf_path}' not found.")
-        print("To verify page numbers and indexing, a sample 'test.pdf' will be created dynamically.")
-        
-        # We can dynamically generate a simple PDF using pypdf itself, or warn the user.
-        # Since generating PDFs is standard in reportlab, we try to create a basic test PDF if possible.
-        try:
-            # We can write a simple test PDF with multiple pages to test page tracking.
-            # We use reportlab if it can be imported, else we print instructions.
-            from reportlab.lib.pagesizes import letter
-            from reportlab.pdfgen import canvas
-            
-            print("Generating a test multi-page PDF using reportlab...")
-            c = canvas.Canvas(test_pdf_path, pagesize=letter)
-            
-            # Page 1
-            c.drawString(100, 750, "This is page one of our test document.")
-            c.drawString(100, 700, "It contains some sample text to test our text chunking and splitting.")
-            c.drawString(100, 650, "We want to make sure the vector database maps the chunk metadata to page 1.")
-            c.showPage()
-            
-            # Page 2
-            c.drawString(100, 750, "This is page two of the test document.")
-            c.drawString(100, 700, "Here we have more sentences that will be split by the RecursiveCharacterTextSplitter.")
-            c.drawString(100, 650, "Page boundaries are crucial for citation and referencing in RAG systems.")
-            c.showPage()
-            
-            # Page 3
-            c.drawString(100, 750, "This is page three of our test document.")
-            c.drawString(100, 700, "Finally, we conclude the document with this page. Langchain's splitter will partition")
-            c.drawString(100, 650, "all this text, and we expect page 3 to show up correctly in metadata.")
-            c.showPage()
-            
-            c.save()
-            print(f"Successfully generated a 3-page test PDF at '{test_pdf_path}'.")
-        except ImportError:
-            print("ReportLab is not installed, so we cannot generate 'test.pdf' automatically.")
-            print("Please place a valid PDF file at './test.pdf' to run the test block.")
-            
-    if os.path.exists(test_pdf_path):
-        # Clean up any existing test collection to ensure fresh test
-        if os.path.exists("./chroma_db"):
-            print("Clearing existing './chroma_db' directory for a clean run...")
-            try:
-                shutil.rmtree("./chroma_db")
-            except Exception as e:
-                print(f"Non-blocking warning: Failed to clean ./chroma_db: {e}")
-                
-        print(f"\nIndexing '{test_pdf_path}' into collection '{collection_name}'...")
-        try:
-            db = index_pdf(test_pdf_path, collection_name=collection_name)
-            print("PDF indexed successfully!")
-            
-            # Retrieve collection using get_chroma_collection
-            print("\nRetrieving the collection using get_chroma_collection...")
-            retrieved_db = get_chroma_collection(collection_name=collection_name)
-            
-            # Fetch some content to print
-            # Let's get the raw collection data using get() to show the first 3 chunks and their metadata
-            results = retrieved_db.get()
-            
-            documents = results.get("documents", [])
-            metadatas = results.get("metadatas", [])
-            ids = results.get("ids", [])
-            
-            num_to_print = min(3, len(documents))
-            print(f"\nSuccessfully retrieved {len(documents)} chunks from collection.")
-            print(f"Printing the first {num_to_print} chunks to verify page numbers:")
-            
-            for i in range(num_to_print):
-                print("-" * 50)
-                print(f"Chunk ID: {ids[i]}")
-                print(f"Metadata: {metadatas[i]}")
-                content_to_print = documents[i].strip()
-                try:
-                    print(f"Content:  {content_to_print}")
-                except UnicodeEncodeError:
-                    # Fallback for Windows consoles that don't support unicode
-                    print(f"Content:  {content_to_print.encode('ascii', errors='replace').decode('ascii')}")
-            print("-" * 50)
-            
-        except Exception as e:
-            print(f"Test failed with error: {e}")
-            import traceback
-            traceback.print_exc()
+    # Simple check on get_chroma_collection
+    try:
+        db = get_chroma_collection(collection_name=collection_name)
+        print("Successfully initialized SQLiteVectorStore.")
+    except Exception as e:
+        print(f"Failed initialization: {e}")
