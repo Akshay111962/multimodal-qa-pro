@@ -1062,6 +1062,614 @@ login_page_html = """<!DOCTYPE html>
 """
 
 
+# --- Custom Workspace HTML ---
+workspace_html = """
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Workspace — Multimodal Q&A Pro</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+<script>
+  (function(){
+    let theme = 'dark';
+    document.documentElement.setAttribute('data-theme', theme);
+
+    function syncToggleIcons(){
+      document.querySelectorAll('.theme-toggle').forEach(btn=>{
+        btn.textContent = theme === 'dark' ? '☀️' : '🌙';
+      });
+    }
+    window.toggleTheme = function(){
+      theme = theme === 'dark' ? 'light' : 'dark';
+      document.documentElement.setAttribute('data-theme', theme);
+      syncToggleIcons();
+      // Notify parent frame
+      try { parent.postMessage({action:'toggle_theme', theme: theme}, '*'); } catch(e){}
+    };
+    document.addEventListener('DOMContentLoaded', function(){
+      syncToggleIcons();
+    });
+    // Listen for theme sync from parent
+    window.addEventListener('message', function(e){
+      if(e.data && e.data.action === 'apply_theme'){
+        theme = e.data.theme;
+        document.documentElement.setAttribute('data-theme', theme);
+        syncToggleIcons();
+      }
+      if(e.data && e.data.action === 'set_user'){
+        const nameEl = document.querySelector('.user-name');
+        const avatarEl = document.querySelector('.avatar');
+        if(nameEl) nameEl.textContent = e.data.name || 'User';
+        if(avatarEl) avatarEl.textContent = (e.data.name || 'U').substring(0,2).toUpperCase();
+      }
+    });
+  })();
+</script>
+<style>
+  :root{
+    --bg:#F4F6F8; --surface:#FFFFFF; --surface-2:#EAEDF0; --line:#DDE2E7;
+    --text:#0E1116; --muted:#5C6470; --accent:#0EA5E9; --accent-soft:#0284C7;
+    --accent-dim: rgba(14,165,233,0.10); --shadow: rgba(15,25,35,0.10);
+    --sidebar-bg:#EFF1F3; --bubble-user:#E4E7EA;
+  }
+  [data-theme="dark"]{
+    --bg:#070A10; --surface:#0E121A; --surface-2:#141A24; --line:#212A38;
+    --text:#EAF2F8; --muted:#7C8797; --accent:#38BDF8; --accent-soft:#7DD3FC;
+    --accent-dim: rgba(56,189,248,0.16); --shadow: rgba(0,0,0,0.6);
+    --sidebar-bg:#0B0E15; --bubble-user:#1B222F;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{
+    background:var(--bg); color:var(--text); font-family:'Inter',sans-serif;
+    height:100vh; overflow:hidden; transition:background-color .3s, color .3s;
+  }
+  a{color:inherit;text-decoration:none;}
+  ::selection{background:var(--accent);color:#03131E;}
+  .magnetic{ transition:transform .15s ease-out; }
+  button{ font-family:'Inter'; cursor:pointer; border:none; background:none; color:inherit; }
+
+  .app{ display:flex; height:100vh; }
+
+  /* ================= SIDEBAR ================= */
+  .sidebar{
+    width:272px; flex-shrink:0; background:var(--sidebar-bg); border-right:1px solid var(--line);
+    display:flex; flex-direction:column; padding:18px 14px;
+  }
+  .sb-logo{
+    font-family:'Space Grotesk'; font-weight:700; font-size:18px; padding:8px 8px 18px;
+    display:flex; align-items:center; gap:8px;
+  }
+  .sb-logo span{ color:var(--accent); }
+
+  .new-chat-btn{
+    display:flex; align-items:center; gap:10px; width:100%; padding:11px 12px;
+    border:1px solid var(--line); border-radius:10px; background:var(--surface);
+    font-size:13.5px; font-weight:600; color:var(--text); margin-bottom:22px;
+    transition:border-color .2s, background .2s;
+  }
+  .new-chat-btn:hover{ border-color:var(--accent); background:var(--accent-dim); }
+  .new-chat-btn .plus{ color:var(--accent); font-size:16px; font-weight:700; }
+
+  .sb-section-label{
+    font-family:'JetBrains Mono'; font-size:10.5px; letter-spacing:.1em; color:var(--muted);
+    text-transform:uppercase; padding:0 8px 10px;
+  }
+  .history-list{ flex:1; overflow-y:auto; display:flex; flex-direction:column; gap:2px; }
+  .history-item{
+    display:flex; align-items:center; gap:10px; padding:10px 10px; border-radius:8px;
+    font-size:13px; color:var(--muted); transition:background .2s, color .2s; position:relative; cursor:pointer;
+  }
+  .history-item:hover{ background:var(--surface); color:var(--text); }
+  .history-item.active{ background:var(--accent-dim); color:var(--accent-soft); font-weight:600; }
+  .history-item .h-icon{ font-size:12px; opacity:.7; flex-shrink:0; }
+  .history-item .h-title{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1; }
+  .history-group-label{
+    font-family:'JetBrains Mono'; font-size:10px; color:var(--muted); opacity:.6;
+    padding:14px 10px 6px; text-transform:uppercase; letter-spacing:.08em;
+  }
+  .history-group-label:first-child{ padding-top:4px; }
+
+  .sb-bottom{ border-top:1px solid var(--line); padding-top:12px; margin-top:10px; position:relative; }
+  .user-row{
+    display:flex; align-items:center; gap:10px; padding:8px; border-radius:10px;
+    transition:background .2s; width:100%;
+  }
+  .user-row:hover{ background:var(--surface); }
+  .avatar{
+    width:30px; height:30px; border-radius:50%; background:var(--accent); color:#03131E;
+    display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:700;
+    font-family:'Space Grotesk'; flex-shrink:0;
+  }
+  .user-name{ font-size:13px; font-weight:600; flex:1; text-align:left; }
+  .user-chevron{ color:var(--muted); font-size:11px; }
+
+  .user-menu{
+    position:absolute; bottom:56px; left:0; width:100%; background:var(--surface);
+    border:1px solid var(--line); border-radius:10px; padding:6px; display:none;
+    box-shadow:0 20px 50px -12px var(--shadow); z-index:20;
+  }
+  .user-menu.open{ display:block; }
+  .user-menu button{
+    width:100%; text-align:left; padding:9px 10px; border-radius:7px; font-size:13px;
+    display:flex; align-items:center; gap:10px; color:var(--text); transition:background .2s;
+  }
+  .user-menu button:hover{ background:var(--surface-2); }
+
+  /* ================= MAIN ================= */
+  .main{ flex:1; display:flex; flex-direction:column; min-width:0; }
+  .main-top{
+    display:flex; align-items:center; justify-content:space-between; padding:16px 26px;
+    border-bottom:1px solid var(--line); flex-shrink:0;
+  }
+  .chat-title{ font-family:'Space Grotesk'; font-weight:600; font-size:14.5px; color:var(--muted); }
+  .main-top-right{ display:flex; align-items:center; gap:10px; }
+  .icon-btn{
+    width:34px; height:34px; border-radius:8px; display:flex; align-items:center; justify-content:center;
+    color:var(--muted); font-size:14px; transition:background .2s, color .2s;
+  }
+  .icon-btn:hover{ background:var(--surface-2); color:var(--text); }
+
+  .chat-area{ flex:1; overflow-y:auto; }
+  .chat-inner{ max-width:760px; margin:0 auto; padding:40px 24px 20px; }
+
+  /* welcome / empty state */
+  .welcome{ display:flex; flex-direction:column; align-items:center; justify-content:center; height:100%; text-align:center; padding:0 24px; }
+  .welcome .w-icon{
+    width:52px; height:52px; border-radius:14px; background:var(--accent-dim); border:1px solid var(--line);
+    display:flex; align-items:center; justify-content:center; font-size:22px; margin-bottom:20px;
+  }
+  .welcome h1{ font-family:'Space Grotesk'; font-size:28px; font-weight:700; margin-bottom:10px; letter-spacing:-0.01em; }
+  .welcome p{ color:var(--muted); font-size:14px; max-width:420px; margin-bottom:30px; line-height:1.5; }
+  .suggestion-row{ display:flex; gap:10px; flex-wrap:wrap; justify-content:center; max-width:600px; }
+  .suggestion-chip{
+    border:1px solid var(--line); background:var(--surface); padding:10px 16px; border-radius:100px;
+    font-size:12.5px; color:var(--text); transition:border-color .2s, background .2s; cursor:pointer;
+  }
+  .suggestion-chip:hover{ border-color:var(--accent); background:var(--accent-dim); }
+
+  /* messages */
+  .msg{ margin-bottom:28px; }
+  .msg-user{ display:flex; justify-content:flex-end; }
+  .msg-user .bubble{
+    background:var(--bubble-user); color:var(--text); padding:12px 16px; border-radius:16px 16px 4px 16px;
+    max-width:70%; font-size:14.5px; line-height:1.5;
+  }
+  .msg-assistant{ display:flex; gap:12px; }
+  .msg-assistant .a-avatar{
+    width:26px; height:26px; border-radius:7px; background:var(--accent); flex-shrink:0; margin-top:2px;
+    display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:700; color:#03131E;
+    font-family:'Space Grotesk';
+  }
+  .msg-assistant .a-content{ flex:1; min-width:0; padding-top:2px; }
+  .msg-assistant .a-text{ font-size:14.5px; line-height:1.65; color:var(--text); }
+
+  .trace-box{
+    border:1px solid var(--line); border-radius:10px; margin-bottom:12px; overflow:hidden; background:var(--surface);
+  }
+  .trace-head{
+    display:flex; align-items:center; gap:8px; padding:9px 13px; cursor:pointer;
+    font-family:'JetBrains Mono'; font-size:11px; color:var(--accent-soft); user-select:none;
+  }
+  .trace-head .chev{ margin-left:auto; font-size:10px; color:var(--muted); transition:transform .2s; }
+  .trace-box.open .chev{ transform:rotate(180deg); }
+  .trace-body{ display:none; padding:0 13px 12px; font-family:'JetBrains Mono'; font-size:11px; color:var(--muted); line-height:1.9; }
+  .trace-box.open .trace-body{ display:block; }
+  .trace-body .go{ color:var(--accent-soft); }
+
+  .thinking{ display:flex; align-items:center; gap:6px; font-family:'JetBrains Mono'; font-size:12px; color:var(--muted); padding:4px 0; }
+  .thinking .tdot{ width:5px; height:5px; border-radius:50%; background:var(--accent); animation:tblip 1.1s infinite; }
+  .thinking .tdot:nth-child(2){ animation-delay:.15s; }
+  .thinking .tdot:nth-child(3){ animation-delay:.3s; }
+  @keyframes tblip{ 0%,100%{opacity:.2;} 50%{opacity:1;} }
+
+  /* ================= COMPOSER ================= */
+  .composer-wrap{ padding:14px 24px 22px; flex-shrink:0; }
+  .composer{
+    max-width:760px; margin:0 auto; border:1.5px solid var(--line); background:var(--surface);
+    border-radius:20px; padding:8px 8px 8px 8px; transition:border-color .2s, box-shadow .2s;
+  }
+  .composer:focus-within{ border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-dim); }
+  .composer-attachments{ display:flex; gap:6px; flex-wrap:wrap; padding:4px 8px 6px; }
+  .attach-chip{
+    display:flex; align-items:center; gap:6px; background:var(--surface-2); border:1px solid var(--line);
+    border-radius:8px; padding:5px 9px; font-size:11.5px; color:var(--text);
+  }
+  .attach-chip .rm{ color:var(--muted); font-size:12px; margin-left:2px; cursor:pointer; }
+  .attach-chip .rm:hover{ color:#E24C4C; }
+  .composer-row{ display:flex; align-items:flex-end; gap:6px; }
+  .attach-wrap{ position:relative; flex-shrink:0; }
+  .attach-btn{
+    width:36px; height:36px; border-radius:50%; display:flex; align-items:center; justify-content:center;
+    color:var(--muted); font-size:19px; transition:background .2s, color .2s;
+  }
+  .attach-btn:hover{ background:var(--surface-2); color:var(--accent); }
+  .attach-menu{
+    position:absolute; bottom:44px; left:0; background:var(--surface); border:1px solid var(--line);
+    border-radius:10px; padding:6px; display:none; min-width:180px; box-shadow:0 20px 50px -12px var(--shadow); z-index:10;
+  }
+  .attach-menu.open{ display:block; }
+  .attach-menu button{
+    width:100%; text-align:left; padding:9px 10px; border-radius:7px; font-size:13px;
+    display:flex; align-items:center; gap:10px; transition:background .2s;
+  }
+  .attach-menu button:hover{ background:var(--surface-2); }
+
+  .composer textarea{
+    flex:1; border:none; background:transparent; outline:none; resize:none; color:var(--text);
+    font-family:'Inter'; font-size:14.5px; line-height:1.5; padding:8px 4px; max-height:160px;
+  }
+  .composer textarea::placeholder{ color:var(--muted); }
+  .send-btn{
+    width:36px; height:36px; border-radius:50%; background:var(--accent); color:#03131E;
+    display:flex; align-items:center; justify-content:center; font-size:15px; flex-shrink:0;
+    transition:transform .15s, opacity .2s; opacity:.4; pointer-events:none;
+  }
+  .send-btn.ready{ opacity:1; pointer-events:auto; }
+  .send-btn.ready:hover{ transform:scale(1.08); }
+  .composer-hint{ text-align:center; font-size:10.5px; color:var(--muted); margin-top:10px; font-family:'JetBrains Mono'; }
+
+  /* File input hidden */
+  .hidden-file-input{ display:none; }
+
+  ::-webkit-scrollbar{ width:8px; }
+  ::-webkit-scrollbar-thumb{ background:var(--line); border-radius:10px; }
+
+  @media(max-width:800px){
+    .sidebar{ position:fixed; z-index:40; height:100vh; transform:translateX(-100%); transition:transform .25s; }
+    .sidebar.open{ transform:translateX(0); }
+    #sidebarToggle{ display:flex !important; }
+  }
+</style>
+</head>
+<body>
+
+<input type="file" id="realFileInput" class="hidden-file-input" accept=".pdf,image/*">
+
+<div class="app">
+
+  <!-- ================= SIDEBAR ================= -->
+  <div class="sidebar" id="sidebar">
+    <a class="sb-logo">MQA<span>&deg;</span></a>
+
+    <button class="new-chat-btn magnetic" onclick="newChat()">
+      <span class="plus">+</span> New chat
+    </button>
+
+    <div class="history-list" id="historyList">
+      <!-- dynamically populated -->
+    </div>
+
+    <div class="sb-bottom">
+      <div class="user-menu" id="userMenu">
+        <button onclick="toggleTheme()">&#127769; Toggle theme</button>
+        <button onclick="handleLogout()">&#8618; Log out</button>
+      </div>
+      <button class="user-row" onclick="toggleUserMenu()">
+        <div class="avatar">AP</div>
+        <span class="user-name">Achyut Pathak</span>
+        <span class="user-chevron">&#9650;</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- ================= MAIN ================= -->
+  <div class="main">
+    <div class="main-top">
+      <div style="display:flex;align-items:center;gap:10px;">
+        <button class="icon-btn magnetic" id="sidebarToggle" onclick="document.getElementById('sidebar').classList.toggle('open')" style="display:none;">&#9776;</button>
+        <div class="chat-title" id="chatTitle">New chat</div>
+      </div>
+      <div class="main-top-right">
+        <button class="icon-btn magnetic theme-toggle" onclick="toggleTheme()" title="Toggle theme">&#127769;</button>
+      </div>
+    </div>
+
+    <div class="chat-area" id="chatArea">
+      <div class="chat-inner" id="chatInner">
+        <!-- populated by JS -->
+      </div>
+    </div>
+
+    <div class="composer-wrap">
+      <div class="composer" id="composer">
+        <div class="composer-attachments" id="attachments"></div>
+        <div class="composer-row">
+          <div class="attach-wrap">
+            <button class="attach-btn" onclick="toggleAttachMenu(event)">+</button>
+            <div class="attach-menu" id="attachMenu">
+              <button onclick="triggerFileUpload('pdf')">&#9636; Upload PDF</button>
+              <button onclick="triggerFileUpload('image')">&#9680; Upload Image</button>
+            </div>
+          </div>
+          <textarea id="composerInput" rows="1" placeholder="Ask anything, or drop a PDF / image&hellip;" oninput="onComposerInput(this)" onkeydown="onComposerKey(event)"></textarea>
+          <button class="send-btn" id="sendBtn" onclick="sendMessage()">&#8593;</button>
+        </div>
+      </div>
+      <div class="composer-hint">MQA can check your documents, the live web, or an image &mdash; it decides per question.</div>
+    </div>
+  </div>
+</div>
+
+<script>
+  /* ---------- chat state ---------- */
+  const chats = {};
+  let currentChat = null;
+  let chatCounter = 0;
+
+  function generateChatId(){ return 'chat_' + (++chatCounter) + '_' + Date.now(); }
+
+  const chatArea = document.getElementById('chatArea');
+  const chatTitle = document.getElementById('chatTitle');
+
+  function renderChat(id){
+    currentChat = id;
+    document.querySelectorAll('.history-item').forEach(el=>el.classList.toggle('active', el.dataset.chat===id));
+    const data = chats[id];
+
+    if(!data || !data.messages || data.messages.length===0){
+      chatTitle.textContent = 'New chat';
+      chatArea.innerHTML = '<div class="welcome">' +
+        '<div class="w-icon">&#9672;</div>' +
+        '<h1>Where should we start?</h1>' +
+        '<p>Ask a question, upload a PDF, or drop an image &mdash; MQA figures out which source to check.</p>' +
+        '<div class="suggestion-row">' +
+          '<div class="suggestion-chip" onclick="quickFill(\\'Summarize the key points of this PDF\\')">Summarize a PDF</div>' +
+          '<div class="suggestion-chip" onclick="quickFill(\\'What does this chart show?\\')">Explain an image</div>' +
+          '<div class="suggestion-chip" onclick="quickFill(\\'What are the latest interest rates?\\')">Check the live web</div>' +
+        '</div>' +
+      '</div>';
+      return;
+    }
+
+    chatTitle.textContent = data.title;
+    chatArea.innerHTML = '<div class="chat-inner" id="chatInner"></div>';
+    const inner = document.getElementById('chatInner');
+    data.messages.forEach(m=>{
+      if(m.role==='user'){
+        inner.innerHTML += '<div class="msg msg-user"><div class="bubble">' + m.text + '</div></div>';
+      } else {
+        let traceHtml = '';
+        if(m.trace && m.trace.length){
+          traceHtml = '<div class="trace-box" onclick="this.classList.toggle(\\'open\\')">' +
+            '<div class="trace-head">&#9672; Reasoning trace <span class="chev">&#9662;</span></div>' +
+            '<div class="trace-body">' +
+              m.trace.map(t=>'<div class="go">&#10003; ' + t.tool + '</div><div style="margin-bottom:6px;color:var(--muted);">&rarr; ' + t.out + '</div>').join('') +
+            '</div></div>';
+        }
+        inner.innerHTML += '<div class="msg msg-assistant">' +
+          '<div class="a-avatar">M</div>' +
+          '<div class="a-content">' + traceHtml + '<div class="a-text">' + m.text + '</div></div></div>';
+      }
+    });
+    chatArea.scrollTop = chatArea.scrollHeight;
+  }
+
+  function newChat(){
+    const id = generateChatId();
+    chats[id] = {title:'New chat', messages:[]};
+    addHistoryItem(id, 'New chat');
+    renderChat(id);
+    closeMenus();
+  }
+
+  function addHistoryItem(id, title){
+    const list = document.getElementById('historyList');
+    // Remove empty placeholder if any
+    const existing = list.querySelector('[data-chat="'+id+'"]');
+    if(existing) return;
+
+    const div = document.createElement('div');
+    div.className = 'history-item';
+    div.dataset.chat = id;
+    div.innerHTML = '<span class="h-icon">&#9680;</span><span class="h-title">' + title + '</span>';
+    div.addEventListener('click', ()=>{ renderChat(id); });
+    list.insertBefore(div, list.firstChild);
+  }
+
+  function quickFill(text){
+    document.getElementById('composerInput').value = text;
+    onComposerInput(document.getElementById('composerInput'));
+    document.getElementById('composerInput').focus();
+  }
+
+  /* ---------- composer ---------- */
+  function onComposerInput(el){
+    el.style.height = 'auto';
+    el.style.height = Math.min(el.scrollHeight, 160) + 'px';
+    const sendBtn = document.getElementById('sendBtn');
+    sendBtn.classList.toggle('ready', el.value.trim().length > 0 || attachedFiles.length > 0);
+  }
+  function onComposerKey(e){
+    if(e.key === 'Enter' && !e.shiftKey){
+      e.preventDefault();
+      sendMessage();
+    }
+  }
+
+  let attachedFiles = [];
+  function toggleAttachMenu(e){
+    e.stopPropagation();
+    document.getElementById('attachMenu').classList.toggle('open');
+  }
+
+  function triggerFileUpload(type){
+    const input = document.getElementById('realFileInput');
+    if(type === 'pdf'){
+      input.accept = '.pdf';
+    } else {
+      input.accept = 'image/*';
+    }
+    input.click();
+    document.getElementById('attachMenu').classList.remove('open');
+  }
+
+  document.getElementById('realFileInput').addEventListener('change', function(e){
+    const file = e.target.files[0];
+    if(!file) return;
+    attachedFiles.push({file: file, name: file.name, icon: file.name.endsWith('.pdf') ? '&#9636;' : '&#9680;'});
+    renderAttachments();
+    onComposerInput(document.getElementById('composerInput'));
+    e.target.value = '';
+  });
+
+  function renderAttachments(){
+    const wrap = document.getElementById('attachments');
+    wrap.innerHTML = attachedFiles.map((f,i)=>
+      '<div class="attach-chip">' + f.icon + ' ' + f.name + ' <span class="rm" onclick="removeAttach(' + i + ')">&#10005;</span></div>'
+    ).join('');
+  }
+  function removeAttach(i){
+    attachedFiles.splice(i,1);
+    renderAttachments();
+    onComposerInput(document.getElementById('composerInput'));
+  }
+
+  /* ---------- send message (calls real backend) ---------- */
+  async function sendMessage(){
+    const input = document.getElementById('composerInput');
+    const text = input.value.trim();
+    if(!text && attachedFiles.length===0) return;
+
+    // Ensure we have a chat
+    if(!currentChat || !chats[currentChat]){
+      newChat();
+    }
+    if(chats[currentChat].messages.length === 0){
+      chatArea.innerHTML = '<div class="chat-inner" id="chatInner"></div>';
+    }
+
+    // Handle file uploads first
+    if(attachedFiles.length > 0){
+      for(const af of attachedFiles){
+        const uploadText = 'Uploaded: ' + af.name;
+        chats[currentChat].messages.push({role:'user', text: uploadText});
+        const inner = document.getElementById('chatInner');
+        inner.innerHTML += '<div class="msg msg-user"><div class="bubble">' + uploadText + '</div></div>';
+
+        // Show thinking
+        const thinkId = 'think-upload-'+Date.now();
+        inner.innerHTML += '<div class="msg msg-assistant" id="' + thinkId + '">' +
+          '<div class="a-avatar">M</div>' +
+          '<div class="a-content"><div class="thinking"><span class="tdot"></span><span class="tdot"></span><span class="tdot"></span> processing file&hellip;</div></div></div>';
+        chatArea.scrollTop = chatArea.scrollHeight;
+
+        try{
+          const formData = new FormData();
+          formData.append('file', af.file);
+          const resp = await fetch('/api/upload', {method:'POST', body: formData});
+          const data = await resp.json();
+          const el = document.getElementById(thinkId);
+          el.innerHTML = '<div class="a-avatar">M</div><div class="a-content">' +
+            '<div class="trace-box" onclick="this.classList.toggle(\\'open\\')">' +
+            '<div class="trace-head">&#9672; Processing trace <span class="chev">&#9662;</span></div>' +
+            '<div class="trace-body"><div class="go">&#10003; ' + (af.name.endsWith('.pdf') ? 'process_pdf' : 'process_image') + '</div>' +
+            '<div style="color:var(--muted);">&rarr; ' + data.filename + '</div></div></div>' +
+            '<div class="a-text">' + data.result + '</div></div>';
+          chats[currentChat].messages.push({role:'assistant', text: data.result, trace:[{tool: af.name.endsWith('.pdf') ? 'process_pdf' : 'process_image', out: data.filename}]});
+        } catch(err){
+          const el = document.getElementById(thinkId);
+          el.innerHTML = '<div class="a-avatar">M</div><div class="a-content"><div class="a-text">Error uploading file: ' + err.message + '</div></div>';
+        }
+        chatArea.scrollTop = chatArea.scrollHeight;
+      }
+      attachedFiles = [];
+      renderAttachments();
+    }
+
+    // Handle text query
+    if(text){
+      let displayText = text;
+      chats[currentChat].messages.push({role:'user', text: displayText});
+
+      // Update chat title from first message
+      if(chats[currentChat].title === 'New chat'){
+        chats[currentChat].title = text.substring(0, 40) + (text.length > 40 ? '...' : '');
+        chatTitle.textContent = chats[currentChat].title;
+        const histItem = document.querySelector('[data-chat="'+currentChat+'"] .h-title');
+        if(histItem) histItem.textContent = chats[currentChat].title;
+      }
+
+      const inner = document.getElementById('chatInner');
+      inner.innerHTML += '<div class="msg msg-user"><div class="bubble">' + displayText + '</div></div>';
+
+      input.value=''; input.style.height='auto';
+      document.getElementById('sendBtn').classList.remove('ready');
+
+      const thinkingId = 'think-'+Date.now();
+      inner.innerHTML += '<div class="msg msg-assistant" id="' + thinkingId + '">' +
+        '<div class="a-avatar">M</div>' +
+        '<div class="a-content"><div class="thinking"><span class="tdot"></span><span class="tdot"></span><span class="tdot"></span> deciding which tool to use&hellip;</div></div></div>';
+      chatArea.scrollTop = chatArea.scrollHeight;
+
+      try{
+        const resp = await fetch('/api/chat', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({query: text})
+        });
+        const data = await resp.json();
+        const el = document.getElementById(thinkingId);
+
+        let traceHtml = '';
+        if(data.tools_used && data.tools_used.length){
+          traceHtml = '<div class="trace-box" onclick="this.classList.toggle(\\'open\\')">' +
+            '<div class="trace-head">&#9672; Reasoning trace <span class="chev">&#9662;</span></div>' +
+            '<div class="trace-body">' +
+              data.tools_used.map(t=>'<div class="go">&#10003; ' + t + '</div>').join('') +
+            '</div></div>';
+        }
+        el.innerHTML = '<div class="a-avatar">M</div><div class="a-content">' + traceHtml + '<div class="a-text">' + data.answer + '</div></div>';
+        chats[currentChat].messages.push({role:'assistant', text: data.answer, trace: (data.tools_used||[]).map(t=>({tool:t, out:''}))});
+      } catch(err){
+        const el = document.getElementById(thinkingId);
+        el.innerHTML = '<div class="a-avatar">M</div><div class="a-content"><div class="a-text">Error: ' + err.message + '</div></div>';
+      }
+      chatArea.scrollTop = chatArea.scrollHeight;
+    } else {
+      input.value=''; input.style.height='auto';
+      document.getElementById('sendBtn').classList.remove('ready');
+    }
+  }
+
+  /* ---------- user menu ---------- */
+  function toggleUserMenu(){
+    document.getElementById('userMenu').classList.toggle('open');
+    document.getElementById('attachMenu').classList.remove('open');
+  }
+  function closeMenus(){
+    document.getElementById('userMenu').classList.remove('open');
+    document.getElementById('attachMenu').classList.remove('open');
+  }
+  function handleLogout(){
+    try { parent.postMessage({action:'go_landing'}, '*'); } catch(e){}
+  }
+  document.addEventListener('click', (e)=>{
+    if(!e.target.closest('.user-row') && !e.target.closest('.user-menu')) document.getElementById('userMenu').classList.remove('open');
+    if(!e.target.closest('.attach-wrap')) document.getElementById('attachMenu').classList.remove('open');
+  });
+
+  /* ---------- magnetic ---------- */
+  document.querySelectorAll('.magnetic').forEach(btn=>{
+    btn.addEventListener('mousemove', e=>{
+      const r = btn.getBoundingClientRect();
+      const x = e.clientX - r.left - r.width/2;
+      const y = e.clientY - r.top - r.height/2;
+      btn.style.transform = 'translate(' + (x*0.12) + 'px, ' + (y*0.2) + 'px)';
+    });
+    btn.addEventListener('mouseleave', ()=>{ btn.style.transform='translate(0,0)'; });
+  });
+
+  // Start with a new empty chat
+  newChat();
+</script>
+</body>
+</html>
+"""
+
+
 # JavaScript to listen for postMessage events from the iframes
 listen_js = '''
 function() {
@@ -1099,11 +1707,11 @@ function() {
             showPage('landing-page-html');
         } else if (data.action === 'login_success') {
             showPage('workspace-container');
-            // Update user profile
-            const nameEl = document.querySelector('.user-info .name');
-            if (nameEl && data.name) nameEl.textContent = data.name;
-            const avatarEl = document.querySelector('.avatar-icon');
-            if (avatarEl && data.name) avatarEl.textContent = data.name[0].toUpperCase();
+            // Send user info to workspace iframe
+            const wsIframe = document.querySelector('#workspace-iframe');
+            if (wsIframe && wsIframe.contentWindow && data.name) {
+                wsIframe.contentWindow.postMessage({action: 'set_user', name: data.name}, '*');
+            }
         } else if (data.action === 'toggle_theme') {
             const theme = data.theme;
             if (theme === 'dark') {
@@ -1583,38 +2191,11 @@ with gr.Blocks(title="Multimodal Q&A Pro", fill_width=True) as demo:
             f'''<iframe srcdoc="{login_page_html.replace('"', '&quot;')}" style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; border: none; margin: 0; padding: 0; display: block; z-index: 9998;"></iframe>'''
         )
 
-    # ─── Workspace Page (Claude-style layout) ───
+    # ─── Workspace Page (custom HTML served as iframe) ───
     with gr.Column(visible=True, elem_id="workspace-container", elem_classes=["workspace-grid-bg"]) as col_workspace:
-        with gr.Row(elem_classes=["workspace-row"]):
-            # Left Sidebar
-            with gr.Column(scale=0, elem_classes=["sidebar-left"]):
-                gr.HTML('<div class="sidebar-logo">MQA</div>')
-
-                btn_new_chat = gr.Button("+ New chat", elem_classes=["new-chat-btn"])
-
-                with gr.Column(elem_classes=["h_lst"]):
-                    pass
-
-                user_profile_box = gr.HTML(value="""
-                    <div class="u_p">
-                        <div class="avatar-icon">A</div>
-                        <div class="user-info">
-                            <span class="name">User</span>
-                        </div>
-                    </div>
-                """)
-
-            # Center/Right Chat Area
-            with gr.Column(scale=3, elem_classes=["m_cnt"]):
-                chatbot = gr.Chatbot(
-                    value=[{"role": "assistant", "content": "Welcome! I'm your MQA assistant. Upload a PDF or image, or ask me anything to get started."}],
-                    show_label=False,
-                    elem_classes=["custom-chatbot"]
-                )
-                with gr.Column(elem_classes=["i_w_wrapper"]):
-                    with gr.Row(elem_classes=["i_w"]):
-                        workspace_upload = gr.UploadButton("📎 Upload PDF/Image", file_types=[".pdf", "image"], variant="secondary", elem_classes=["inline-upload-btn"])
-                        msg = gr.Textbox(placeholder="How can I help you today?", show_label=False, container=False, elem_classes=["custom-input"])
+        gr.HTML(
+            f'''<iframe id="workspace-iframe" srcdoc="{workspace_html.replace('"', '&quot;')}" style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; border: none; margin: 0; padding: 0; display: block; z-index: 9997;"></iframe>'''
+        )
 
     # ─── Event Handlers ───
     def show_landing():
@@ -1637,13 +2218,11 @@ with gr.Blocks(title="Multimodal Q&A Pro", fill_width=True) as demo:
             res = login_user(email, password)
             if res["success"]:
                 user_data = {"name": res["name"], "email": res["email"]}
-                user_html = f"<div class='u_p'><div class='avatar-icon'>{res['name'][0].upper()}</div><div class='user-info'><span class='name'>{res['name']}</span></div></div>"
-                greeting = [{"role": "assistant", "content": f"Welcome back, {res['name']}! I'm your MQA assistant. Upload a PDF or image, or ask me anything."}]
-                return user_data, user_html, greeting, json.dumps({"action": "login_success"})
+                return user_data, json.dumps({"action": "login_success", "name": res["name"], "email": res["email"]})
             else:
-                return None, gr.update(), gr.update(), json.dumps({"action": "login_error", "message": res["message"]})
+                return None, json.dumps({"action": "login_error", "message": res["message"]})
         except Exception as e:
-            return None, gr.update(), gr.update(), json.dumps({"action": "login_error", "message": f"Something went wrong: {e}"})
+            return None, json.dumps({"action": "login_error", "message": f"Something went wrong: {e}"})
 
     btn_go_login.click(show_login, None, [col_landing, col_login, col_workspace])
     btn_go_landing.click(show_landing, None, [col_landing, col_login, col_workspace])
@@ -1659,7 +2238,7 @@ with gr.Blocks(title="Multimodal Q&A Pro", fill_width=True) as demo:
     btn_do_login.click(
         handle_login,
         inputs=[login_email, login_password],
-        outputs=[session_state, user_profile_box, chatbot, trigger_js_box],
+        outputs=[session_state, trigger_js_box],
         js="(e, p) => [window.auth_data.email, window.auth_data.password]",
         queue=False
     )
@@ -1682,56 +2261,12 @@ with gr.Blocks(title="Multimodal Q&A Pro", fill_width=True) as demo:
         }"""
     )
 
-    def handle_query(query, history):
-        if not query:
-            return history, ""
-        history = history or []
-        history.append({"role": "user", "content": query})
-
-        res = run_agent_query(query)
-        answer = res.get("answer", "No answer found.")
-        tools_used = res.get("tools_used", [])
-
-        if tools_used:
-            tools_str = "\n".join([f"✓ {t}" for t in tools_used])
-            trace_header = f'<small style="opacity:0.6;font-family:monospace;display:block;margin-bottom:8px;border-bottom:1px solid #334155;padding-bottom:4px;">Routing trace:\n{tools_str}</small>'
-            bot_content = trace_header + answer
-        else:
-            bot_content = answer
-
-        history.append({"role": "assistant", "content": bot_content})
-        return history, ""
-
-    def handle_upload(file_obj, history):
-        if not file_obj:
-            return history
-        filename = file_obj.name
-        history = history or []
-
-        if filename.lower().endswith('.pdf'):
-            res = process_pdf(filename)
-            history.append({"role": "user", "content": f"Uploaded PDF: {os.path.basename(filename)}"})
-            history.append({"role": "assistant", "content": f"✓ {res}"})
-        else:
-            res = process_image(filename)
-            history.append({"role": "user", "content": f"Uploaded Image: {os.path.basename(filename)}"})
-            history.append({"role": "assistant", "content": f"✓ {res}"})
-        return history
-
-    msg.submit(
-        handle_query,
-        inputs=[msg, chatbot],
-        outputs=[chatbot, msg]
-    )
-    workspace_upload.upload(
-        handle_upload,
-        inputs=[workspace_upload, chatbot],
-        outputs=[chatbot]
-    )
-
 if __name__ == '__main__':
     import uvicorn
-    from fastapi import FastAPI
+    import tempfile
+    import shutil
+    from fastapi import FastAPI, UploadFile, File, Form
+    from fastapi.responses import HTMLResponse
 
     # Create a standalone FastAPI app with auth API routes
     api_app = FastAPI()
@@ -1758,6 +2293,49 @@ if __name__ == '__main__':
             return JSONResponse(content=res)
         except Exception as e:
             return JSONResponse(content={"success": False, "message": str(e)}, status_code=500)
+
+    @api_app.post("/api/chat")
+    async def api_chat(request: Request):
+        """Handle chat messages from the workspace frontend"""
+        try:
+            body = await request.json()
+            query = body.get("query", "").strip()
+            if not query:
+                return JSONResponse(content={"answer": "Please enter a question.", "tools_used": []})
+            res = run_agent_query(query)
+            answer = res.get("answer", "No answer found.")
+            tools_used = res.get("tools_used", [])
+            return JSONResponse(content={"answer": answer, "tools_used": tools_used})
+        except Exception as e:
+            return JSONResponse(content={"answer": f"Error: {str(e)}", "tools_used": []}, status_code=500)
+
+    @api_app.post("/api/upload")
+    async def api_upload(file: UploadFile = File(...)):
+        """Handle file uploads from the workspace frontend"""
+        try:
+            # Save uploaded file to a temp location
+            suffix = os.path.splitext(file.filename)[1]
+            tmp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
+            content = await file.read()
+            tmp.write(content)
+            tmp.flush()
+            tmp.close()
+
+            filename = tmp.name
+            if file.filename.lower().endswith('.pdf'):
+                res = process_pdf(filename)
+            else:
+                res = process_image(filename)
+
+            # Clean up temp file
+            try:
+                os.unlink(filename)
+            except:
+                pass
+
+            return JSONResponse(content={"result": str(res), "filename": file.filename})
+        except Exception as e:
+            return JSONResponse(content={"result": f"Error: {str(e)}", "filename": file.filename if file else "unknown"}, status_code=500)
 
     # Mount Gradio app onto FastAPI
     api_app = gr.mount_gradio_app(api_app, demo, path="/", root_path="")

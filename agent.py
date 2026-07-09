@@ -71,7 +71,8 @@ def run_agent(query: str) -> Tuple[str, List[str]]:
         llm = ChatGroq(
             model="llama-3.3-70b-versatile",
             temperature=0.0,
-            api_key=api_key.strip()
+            api_key=api_key.strip(),
+            max_retries=2
         )
 
         # Create the ReAct agent
@@ -90,24 +91,34 @@ def run_agent(query: str) -> Tuple[str, List[str]]:
         error_msg = str(e)
         # Catch standard Groq API BadRequestError or tool use failure messages
         if "400" in error_msg or "tool_use_failed" in error_msg or "BadRequestError" in error_msg:
-            print("\n[System Warning]: Llama-3.3-70b-versatile tool execution failed due to Groq API parser limitations.")
-            print("Running fallback model: llama-3.1-8b-instant...\n")
+            print("\n[System Warning]: Llama-3.3-70b-versatile tool execution failed.")
+            print("Running fallback: direct LLM without tools...\n")
             
-            llm_fallback = ChatGroq(
-                model="llama-3.1-8b-instant",
-                temperature=0.0,
-                api_key=api_key.strip()
-            )
-            agent_fallback = create_react_agent(
-                model=llm_fallback,
-                tools=tools,
-                prompt=SYSTEM_PROMPT
-            )
-            
-            inputs = {"messages": [("user", query)]}
-            config = {"recursion_limit": 12}
-            
-            response = agent_fallback.invoke(inputs, config=config)
+            # Fallback: direct LLM call without tools to always get an answer
+            try:
+                llm_direct = ChatGroq(
+                    model="llama-3.3-70b-versatile",
+                    temperature=0.2,
+                    api_key=api_key.strip()
+                )
+                direct_response = llm_direct.invoke([
+                    ("system", SYSTEM_PROMPT),
+                    ("user", query)
+                ])
+                return direct_response.content, ["direct_llm (no tools)"]
+            except Exception as fallback_err:
+                print(f"Direct LLM fallback also failed: {fallback_err}")
+                # Try the smaller model as last resort
+                llm_small = ChatGroq(
+                    model="llama-3.1-8b-instant",
+                    temperature=0.2,
+                    api_key=api_key.strip()
+                )
+                small_response = llm_small.invoke([
+                    ("system", "You are a helpful AI assistant. Answer the user's question clearly and thoroughly."),
+                    ("user", query)
+                ])
+                return small_response.content, ["fallback_llm (llama-3.1-8b)"]
         else:
             # Raise other unexpected errors (e.g. invalid api keys, timeouts)
             raise e
